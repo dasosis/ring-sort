@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ring Sort Solver</title>
+<meta name="description" content="Animated solver for the coloured ring sorting puzzle. O(n²·h) constructive algorithm.">
+<style>
+  :root {
+    --bg: #f4efe6;
+    --panel: #fffaf2;
+    --ink: #2b2420;
+    --muted: #7a6d62;
+    --wood: #9b6b43;
+    --wood-dark: #6e4a2c;
+    --pole: #8a8a8a;
+    --accent: #c4512b;
+    --line: #e2d8c9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1714;
+      --panel: #241f1b;
+      --ink: #f1e8dc;
+      --muted: #a6988a;
+      --wood: #7c5332;
+      --wood-dark: #5a3b22;
+      --pole: #6f6f6f;
+      --accent: #f07a50;
+      --line: #3a322b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+  }
+  canvas { width: 100%; height: 420px; display: block; }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px 18px;
+    margin-top: 16px;
+    align-items: end;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); }
+  label b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  button {
+    font: inherit;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 6px 20px;
+    margin-top: 14px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .stats b { color: var(--ink); }
+  progress { width: 100%; height: 6px; margin-top: 10px; accent-color: var(--accent); }
+  section.how { margin-top: 32px; }
+  section.how h2 { font-size: 18px; margin: 0 0 8px; }
+  section.how ol { padding-left: 20px; margin: 0; }
+  section.how li { margin-bottom: 6px; }
+  code { background: var(--line); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 600px) { canvas { height: 320px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ring Sort Solver</h1>
+  <p class="sub">Sort every colour onto its own rod. One spare rod, top ring moves only, any rod with space.</p>
+
+  <div class="stage"><canvas id="cv"></canvas></div>
+
+  <div class="controls">
+    <label>Colours <b id="nOut">6</b><input id="n" type="range" min="2" max="12" value="6"></label>
+    <label>Height <b id="hOut">8</b><input id="h" type="range" min="2" max="14" value="8"></label>
+    <label>Speed <b id="sOut">×4</b><input id="speed" type="range" min="0" max="8" value="3"></label>
+  </div>
+
+  <div class="buttons">
+    <button id="shuffle">New puzzle</button>
+    <button id="play" class="primary">Solve</button>
+    <button id="step">Step</button>
+    <button id="reset">Restart</button>
+  </div>
+
+  <progress id="prog" value="0" max="1"></progress>
+  <div class="stats">
+    <span>Move <b id="moveNo">0</b> / <b id="moveTotal">0</b></span>
+    <span>Phase <b id="phase">–</b></span>
+    <span>Bound <b id="bound">–</b></span>
+  </div>
+
+  <section class="how">
+    <h2>How it works</h2>
+    <ol>
+      <li><b>Consolidate.</b> Empty the emptiest rod into the gaps elsewhere, so one rod <i>E</i> is empty and the rest are full.</li>
+      <li><b>Pick a colour</b> <i>c</i> that is cheapest to extract.</li>
+      <li><b>Partition.</b> For each full rod <i>A</i> holding <i>c</i>, use <i>E</i> and a borrowed full rod <i>B</i> to rebuild <i>A</i> with its <i>c</i> rings on top. <i>B</i> is restored exactly and <i>E</i> ends empty (at most 4h moves).</li>
+      <li><b>Pour.</b> Lift every <i>c</i> ring off the tops into <i>E</i>. There are exactly <i>h</i> of them, so <i>E</i> is finished. Repeat with one colour fewer.</li>
+    </ol>
+    <p>Each phase with <i>k</i> colours left costs at most (4k + 2)·h moves, so the total is <code>O(n²·h)</code> moves and <code>O(n²·h)</code> time, linear in the length of the answer. It always succeeds but isn't minimum-move: finding the fewest moves for this family of puzzles is NP-hard.</p>
+  </section>
+
+  <footer>Python version: <code>ring_sort.py</code> in this repo.</footer>
+</main>
+
+<script>
+// ---------- Solver (port of ring_sort.py) ----------
+function solve(start, H) {
+  const rods = start.map(r => r.slice());
+  const moves = [];          // [src, dst, phaseLabel]
+  let label = "";
+  const mv = (s, d, t = 1) => {
+    for (let i = 0; i < t; i++) { rods[d].push(rods[s].pop()); moves.push([s, d, label]); }
+  };
+  const done = i => rods[i].length === H && rods[i].every(x => x === rods[i][0]);
+  let active = rods.map((_, i) => i);
+
+  while (true) {
+    active = active.filter(i => !done(i));
+    if (active.every(i => rods[i].length === 0)) return moves;
+
+    // 1. consolidate
+    label = "consolidate";
+    const e = active.reduce((a, b) => rods[b].length < rods[a].length ? b : a);
+    const full = active.filter(i => i !== e);
+    let j = 0;
+    while (rods[e].length) {
+      while (rods[full[j]].length === H) j++;
+      mv(e, full[j]);
+    }
+
+    // 2. choose colour
+    const counts = {}, cost = new Map();
+    for (const i of full) {
+      const r = rods[i], cnt = new Map();
+      for (const x of r) cnt.set(x, (cnt.get(x) || 0) + 1);
+      counts[i] = cnt;
+      const top = r[H - 1];
+      let run = 1;
+      while (run < H && r[H - 1 - run] === top) run++;
+      for (const [col, a] of cnt) {
+        const onTop = col === top && a === run;
+        cost.set(col, (cost.get(col) || 0) + (onTop ? 0 : 2 * H + 2 * a));
+      }
+    }
+    let c = null, best = Infinity;
+    for (const [col, v] of cost) if (v < best) { best = v; c = col; }
+
+    // 3. partition
+    for (const A of full) {
+      const a = counts[A].get(c) || 0;
+      if (a === 0 || rods[A].slice(H - a).every(x => x === c)) continue;
+      label = "partition";
+      const B = full.find(i => i !== A);
+      mv(B, e, a);
+      for (let k = 0; k < H; k++) mv(A, rods[A][rods[A].length - 1] === c ? B : e);
+      mv(e, A, H - a);
+      mv(B, A, a);
+      mv(e, B, a);
+    }
+
+    // 4. pour
+    label = "pour";
+    for (const i of full) while (rods[i].length && rods[i][rods[i].length - 1] === c) mv(i, e);
+  }
+}
+
+// ---------- Puzzle state ----------
+const PALETTE = ["#1f4fb5", "#2e8b3c", "#f06a1d", "#8cc63f", "#36a9e1", "#c0322b",
+                 "#f2c230", "#8e44ad", "#e86fa6", "#3d3d3d", "#e8e3d7", "#16a39a"];
+const $ = id => document.getElementById(id);
+const SPEEDS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128];
+
+let N = 6, H = 8, start = [], rods = [], moves = [], idx = 0;
+let playing = false, anim = null, speed = 4;
+
+function newPuzzle() {
+  N = +$("n").value; H = +$("h").value;
+  const rings = [];
+  for (let c = 0; c < N; c++) for (let k = 0; k < H; k++) rings.push(c);
+  for (let i = rings.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rings[i], rings[j]] = [rings[j], rings[i]];
+  }
+  start = [];
+  for (let i = 0; i < N; i++) start.push(rings.slice(i * H, (i + 1) * H));
+  start.push([]);
+  moves = solve(start, H);
+  restart();
+}
+
+function restart() {
+  playing = false; anim = null; idx = 0;
+  rods = start.map(r => r.slice());
+  updateUI();
+  draw();
+}
+
+function updateUI() {
+  $("nOut").textContent = $("n").value;
+  $("hOut").textContent = $("h").value;
+  $("sOut").textContent = "×" + speed;
+  $("moveNo").textContent = idx;
+  $("moveTotal").textContent = moves.length;
+  $("bound").textContent = "≤ " + boundFor(N, H);
+  $("phase").textContent = idx >= moves.length ? "solved" : (idx ? moves[Math.max(0, idx - 1)][2] : "–");
+  $("prog").max = Math.max(1, moves.length);
+  $("prog").value = idx;
+  $("play").textContent = playing ? "Pause" : (idx >= moves.length ? "Solved ✓" : idx ? "Resume" : "Solve");
+  $("play").disabled = idx >= moves.length;
+  $("step").disabled = playing || idx >= moves.length;
+}
+function boundFor(n, h) { let s = 0; for (let k = n; k >= 2; k--) s += (4 * k + 2) * h; return s; }
+
+// ---------- Drawing ----------
+const cv = $("cv"), ctx = cv.getContext("2d");
+let geo = null;
+
+function layout() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const R = N + 1;
+  const slot = w / R;
+  const base = h - 18;
+  const liftY = 26;
+  const ringH = Math.min(30, (base - liftY - 30) / H);
+  const ringW = Math.min(slot * 0.86, 110);
+  geo = { w, h, slot, base, ringH, ringW, liftY };
+}
+
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function drawRing(x, y, col) {
+  const { ringW, ringH } = geo;
+  const r = Math.min(ringH / 2, 8);
+  const left = x - ringW / 2, top = y - ringH + 1;
+  const g = ctx.createLinearGradient(left, 0, left + ringW, 0);
+  g.addColorStop(0, shade(PALETTE[col], -0.28));
+  g.addColorStop(0.35, PALETTE[col]);
+  g.addColorStop(0.6, shade(PALETTE[col], 0.12));
+  g.addColorStop(1, shade(PALETTE[col], -0.35));
+  ctx.fillStyle = g;
+  roundRect(left, top, ringW, ringH - 2, r);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.18)";
+  ctx.fillRect(x - 3, top + 2, 6, ringH - 6);
+}
+
+function draw() {
+  if (!geo) layout();
+  const { w, h, slot, base, ringH } = geo;
+  ctx.clearRect(0, 0, w, h);
+  const poleTop = base - H * ringH - 14;
+
+  ctx.fillStyle = css("--wood");
+  roundRect(6, base, w - 12, 12, 4); ctx.fill();
+
+  for (let i = 0; i < rods.length; i++) {
+    const x = slot * (i + 0.5);
+    ctx.fillStyle = css("--pole");
+    roundRect(x - 4, poleTop, 8, base - poleTop, 3); ctx.fill();
+    for (let k = 0; k < rods[i].length; k++) drawRing(x, base - k * ringH, rods[i][k]);
+  }
+
+  if (anim) {
+    const { s, d, col, t } = anim;
+    const x0 = slot * (s + 0.5), x1 = slot * (d + 0.5);
+    const y0 = base - anim.fromK * ringH, y1 = base - anim.toK * ringH;
+    const top = Math.min(poleTop - 6, geo.liftY + ringH);
+    const up = y0 - top, across = Math.abs(x1 - x0), down = y1 - top;
+    const total = up + across + down;
+    let p = ease(t) * total, x, y;
+    if (p < up) { x = x0; y = y0 - p; }
+    else if (p < up + across) { x = x0 + Math.sign(x1 - x0) * (p - up); y = top; }
+    else { x = x1; y = top + (p - up - across); }
+    drawRing(x, y, col);
+  }
+}
+
+function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  const f = v => Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt)));
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+
+// ---------- Animation loop ----------
+const BASE_MS = 650;
+let last = 0;
+
+function beginMove() {
+  const [s, d] = moves[idx];
+  const col = rods[s].pop();
+  anim = { s, d, col, t: 0, fromK: rods[s].length, toK: rods[d].length };
+}
+function finishMove() {
+  rods[anim.d].push(anim.col);
+  anim = null; idx++;
+}
+
+function tick(now) {
+  const dt = last ? now - last : 16; last = now;
+  if (playing) {
+    let budget = dt * speed / BASE_MS;    // in "moves"
+    while (budget > 0 && idx < moves.length) {
+      if (!anim) beginMove();
+      const need = 1 - anim.t;
+      if (budget >= need) { budget -= need; finishMove(); }
+      else { anim.t += budget; budget = 0; }
+    }
+    if (idx >= moves.length) playing = false;
+    updateUI();
+    draw();
+  } else if (anim && anim.stepping) {
+    anim.t = Math.min(1, anim.t + dt / 350);
+    if (anim.t >= 1) { finishMove(); updateUI(); }
+    draw();
+  }
+  requestAnimationFrame(tick);
+}
+
+// ---------- Controls ----------
+$("n").oninput = () => { $("nOut").textContent = $("n").value; };
+$("h").oninput = () => { $("hOut").textContent = $("h").value; };
+$("n").onchange = $("h").onchange = () => { newPuzzle(); layout(); draw(); };
+$("speed").oninput = () => { speed = SPEEDS[+$("speed").value]; updateUI(); };
+$("shuffle").onclick = () => { newPuzzle(); layout(); draw(); };
+$("reset").onclick = restart;
+$("play").onclick = () => { if (anim && anim.stepping) return; playing = !playing; updateUI(); };
+$("step").onclick = () => {
+  if (playing || anim || idx >= moves.length) return;
+  beginMove(); anim.stepping = true; updateUI();
+};
+window.addEventListener("resize", () => { layout(); draw(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+
+speed = SPEEDS[+$("speed").value];
+newPuzzle(); layout(); draw();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
