@@ -2,7 +2,7 @@
 
 Solver and animated visualiser for the coloured ring sorting puzzle: **n** colours, **h** rings of each, **n + 1** rods of height **h**. A move takes the top ring of any rod and puts it on any rod with space; the goal is one colour per rod.
 
-**Live demo:** open `index.html`, or the GitHub Pages link once Pages is enabled.
+**Live demo:** https://dasosis.github.io/ring-sort/
 
 ## Algorithm
 
